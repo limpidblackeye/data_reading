@@ -8,7 +8,8 @@ import numpy as np
 # import cv2
 import matplotlib
 import matplotlib.pyplot as plt
-from skimage.draw import rectangle,circle,polygon
+from skimage.draw import circle, polygon
+
 
 from config import Config
 import utils
@@ -156,7 +157,10 @@ class ShapesDataset(utils.Dataset):
         x, y, s = dims
         if shape == 'square':
             # cv2.rectangle(image, (x-s, y-s), (x+s, y+s), color, -1)
-            rr, cc = rectangle((x-s, y-s), extent=(x+s, y+s),shape=image.shape)
+            r = np.array([x-s,x-s,x+s,x+s])
+            c = np.array([y-s,y+s,y-s,y+s])
+            # rr, cc = rectangle((x-s, y-s), extent=(x+s, y+s),shape=image.shape)
+            rr, cc = polygon(r,c)
             image[rr, cc] = color
         elif shape == "circle":
             # cv2.circle(image, (x, y), s, color, -1)
@@ -350,5 +354,4 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
-
 
