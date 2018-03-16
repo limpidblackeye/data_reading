@@ -5,9 +5,10 @@ import math
 import re
 import time
 import numpy as np
-import cv2
+# import cv2
 import matplotlib
 import matplotlib.pyplot as plt
+from skimage.draw import rectangle,circle,polygon
 
 from config import Config
 import utils
@@ -15,7 +16,7 @@ import model as modellib
 import visualize
 from model import log
 
-%matplotlib inline 
+# %matplotlib inline 
 
 # Root directory of the project
 ROOT_DIR = os.getcwd()
@@ -154,15 +155,23 @@ class ShapesDataset(utils.Dataset):
         # Get the center x, y and the size s
         x, y, s = dims
         if shape == 'square':
-            cv2.rectangle(image, (x-s, y-s), (x+s, y+s), color, -1)
+            # cv2.rectangle(image, (x-s, y-s), (x+s, y+s), color, -1)
+            rr, cc = rectangle((x-s, y-s), extent=(x+s, y+s),shape=image.shape)
+            image[rr, cc] = color
         elif shape == "circle":
-            cv2.circle(image, (x, y), s, color, -1)
+            # cv2.circle(image, (x, y), s, color, -1)
+            rr, cc = circle(x, y, s)
+            image[rr, cc] = color
         elif shape == "triangle":
-            points = np.array([[(x, y-s),
-                                (x-s/math.sin(math.radians(60)), y+s),
-                                (x+s/math.sin(math.radians(60)), y+s),
-                                ]], dtype=np.int32)
-            cv2.fillPoly(image, points, color)
+            # points = np.array([[(x, y-s),
+            #                     (x-s/math.sin(math.radians(60)), y+s),
+            #                     (x+s/math.sin(math.radians(60)), y+s),
+            #                     ]], dtype=np.int32)
+            # cv2.fillPoly(image, points, color)
+            r = np.array([x, x-s/math.sin(math.radians(60)), x+s/math.sin(math.radians(60))])
+            c = np.array([y-s, y+s, y+s])
+            rr, cc = polygon(r, c)
+            image[rr, cc] = color
         return image
 
     def random_shape(self, height, width):
