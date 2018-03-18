@@ -158,14 +158,24 @@ class ShapesDataset(utils.Dataset):
         if shape == 'square':
             # cv2.rectangle(image, (x-s, y-s), (x+s, y+s), color, -1)
             r = np.array([x-s,x-s,x+s,x+s])
-            c = np.array([y-s,y+s,y-s,y+s])
+            c = np.array([y-s,y+s,y+s,y-s])
             # rr, cc = rectangle((x-s, y-s), extent=(x+s, y+s),shape=image.shape)
             rr, cc = polygon(r,c)
-            image[rr, cc] = color
+            rr_=[r__ for r__ in rr if r__<128]
+            cc_=[cc[i] for i in range(len(rr)) if rr[i]<128]
+            print('square')
+            print(rr_)
+            print(cc_)
+            image[rr_, cc_] = color
         elif shape == "circle":
             # cv2.circle(image, (x, y), s, color, -1)
             rr, cc = circle(x, y, s)
-            image[rr, cc] = color
+            rr_=[r__ for r__ in rr if r__<128]
+            cc_=[cc[i] for i in range(len(rr)) if rr[i]<128]
+            print("circle")
+            print(rr_)
+            print(cc_)
+            image[rr_, cc_] = color
         elif shape == "triangle":
             # points = np.array([[(x, y-s),
             #                     (x-s/math.sin(math.radians(60)), y+s),
@@ -175,7 +185,12 @@ class ShapesDataset(utils.Dataset):
             r = np.array([x, x-s/math.sin(math.radians(60)), x+s/math.sin(math.radians(60))])
             c = np.array([y-s, y+s, y+s])
             rr, cc = polygon(r, c)
-            image[rr, cc] = color
+            rr_=[r__ for r__ in rr if r__<128]
+            cc_=[cc[i] for i in range(len(rr)) if rr[i]<128]
+            print("triangle")
+            print(rr_)
+            print(cc_)
+            image[rr_, cc_] = color
         return image
 
     def random_shape(self, height, width):
@@ -354,4 +369,3 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
-
