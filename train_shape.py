@@ -161,8 +161,9 @@ class ShapesDataset(utils.Dataset):
             c = np.array([y-s,y+s,y+s,y-s])
             # rr, cc = rectangle((x-s, y-s), extent=(x+s, y+s),shape=image.shape)
             rr, cc = polygon(r,c)
-            rr_=[r__ for r__ in rr if r__<128]
-            cc_=[cc[i] for i in range(len(rr)) if rr[i]<128]
+            ii=[ i for i in range(len(rr)) if (rr[i]<128)&(cc[i]<128)]
+            rr_=[rr[iii] for iii in ii]
+            cc_=[cc[iii] for iii in ii]
             print('square')
             print(rr_)
             print(cc_)
@@ -170,8 +171,9 @@ class ShapesDataset(utils.Dataset):
         elif shape == "circle":
             # cv2.circle(image, (x, y), s, color, -1)
             rr, cc = circle(x, y, s)
-            rr_=[r__ for r__ in rr if r__<128]
-            cc_=[cc[i] for i in range(len(rr)) if rr[i]<128]
+            ii=[ i for i in range(len(rr)) if (rr[i]<128)&(cc[i]<128)]
+            rr_=[rr[iii] for iii in ii]
+            cc_=[cc[iii] for iii in ii]
             print("circle")
             print(rr_)
             print(cc_)
@@ -185,8 +187,9 @@ class ShapesDataset(utils.Dataset):
             r = np.array([x, x-s/math.sin(math.radians(60)), x+s/math.sin(math.radians(60))])
             c = np.array([y-s, y+s, y+s])
             rr, cc = polygon(r, c)
-            rr_=[r__ for r__ in rr if r__<128]
-            cc_=[cc[i] for i in range(len(rr)) if rr[i]<128]
+            ii=[ i for i in range(len(rr)) if (rr[i]<128)&(cc[i]<128)]
+            rr_=[rr[iii] for iii in ii]
+            cc_=[cc[iii] for iii in ii]
             print("triangle")
             print(rr_)
             print(cc_)
