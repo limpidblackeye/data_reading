@@ -37,9 +37,11 @@ if not os.path.exists(COCO_MODEL_PATH):
 # Data Path
 TRAIN_PATH = 'data/stage1_train/'
 TEST_PATH = 'data/stage1_test/'
+TRAIN_PATH2 = 'data/stage1_train2/'
+
 
 # Get train and test IDs
-train_ids = next(os.walk(TRAIN_PATH))[1]
+# train_ids = next(os.walk(TRAIN_PATH))[1]
 test_ids = next(os.walk(TEST_PATH))[1]
 
 IMAGE_DIR = TEST_PATH
@@ -67,7 +69,7 @@ class ShapesConfig(Config):
     IMAGE_MAX_DIM = 256
 
     # Use smaller anchors because our image and objects are small
-    RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128, 256)  # anchor side in pixels
+    RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)  # anchor side in pixels
 
     # Reduce training ROIs per image because the images are small and have
     # few objects. Aim to allow ROI sampling to pick 33% positive ROIs.
@@ -111,6 +113,7 @@ class ShapesDataset(utils.Dataset):
         count: number of images to generate.
         height, width: the size of the generated images.
         """
+        train_ids = next(os.walk(PATH))[1]
         count = len(next(os.walk(PATH))[1])
         # Add classes
         self.add_class("nuclei", 1, "nucleu")
@@ -144,7 +147,10 @@ class ShapesDataset(utils.Dataset):
     def load_mask(self, image_id):
         """Generate instance masks for shapes of the given image ID.
         """
-        info = self.image_info[image_id]
+        import_path=self.image_info[image_id]['path'].split('/')[1]
+        # info = self.image_info[image_id]
+        PATH = self.image_info[image_id]['path'].split('/')[0] +"/" + self.image_info[image_id]['path'].split('/')[1] + "/"
+        train_ids = next(os.walk(PATH))[1]
         id_ = train_ids[image_id]
         path = TRAIN_PATH + id_
         count = len(next(os.walk(path + '/masks/'))[2])
@@ -298,6 +304,5 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
-
 
 
