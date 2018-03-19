@@ -120,14 +120,14 @@ class ShapesDataset(utils.Dataset):
         # list of shapes sizes and locations). 
         for i in range(count):
             id_ = train_ids[i]
-            path_i = PATH + '/images/' + id_ + '.png'
+            path_i = PATH + id_+ '/images/' + id_ + '.png'
             self.add_image("nuclei", image_id=i, path=path_i)
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,3] Numpy array.
         """
         # Load image
-        image = skimage.io.imread(self.image_info[image_id]['path'])
+        image = imread(self.image_info[image_id]['path'])
         # If grayscale. Convert to RGB for consistency.
         if image.ndim != 3:
             image = skimage.color.gray2rgb(image)
@@ -145,16 +145,15 @@ class ShapesDataset(utils.Dataset):
         """Generate instance masks for shapes of the given image ID.
         """
         info = self.image_info[image_id]
-        shapes = info['nuclei']
-        id_ = train_ids[i]
+        id_ = train_ids[image_id]
         path = TRAIN_PATH + id_
         count = len(next(os.walk(path + '/masks/'))[2])
-        mask = np.zeros([info['height'], info['width'], count], dtype=np.uint8)
+        mask = np.zeros([256, 256, count], dtype=np.uint8)
         # mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
         i = 0
         for mask_file in next(os.walk(path + '/masks/'))[2]:
             mask_ = imread(path + '/masks/' + mask_file)
-            mask_ = np.expand_dims(resize(mask_, (IMG_HEIGHT, IMG_WIDTH), mode='constant', 
+            mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
                                         preserve_range=True), axis=-1)
             mask[:, :, i:i+1] = mask_
             # mask = np.maximum(mask, mask_)
@@ -166,14 +165,14 @@ class ShapesDataset(utils.Dataset):
             mask[:, :, i] = mask[:, :, i] * occlusion
             occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
         # Map class names to class IDs.
-        class_ids = np.array([self.class_names.index(s[0]) for s in shapes])
+        class_ids = np.array([1 for s in range(count)])
         return mask, class_ids.astype(np.int32)
 
 
 ## =================
 # Training dataset
 dataset_train = ShapesDataset()
-dataset_train.load_shapes(TRAIN_PATH1)
+dataset_train.load_shapes(TRAIN_PATH)
 dataset_train.prepare()
 
 # Validation dataset
@@ -190,7 +189,115 @@ for image_id in image_ids:
 
 
 
+## ================ Create model ================ ##
 
+# Create model in training mode
+model = modellib.MaskRCNN(mode="training", config=config,
+                          model_dir=MODEL_DIR)
+
+# Which weights to start with?
+init_with = "coco"  # imagenet, coco, or last
+
+if init_with == "imagenet":
+    model.load_weights(model.get_imagenet_weights(), by_name=True)
+elif init_with == "coco":
+    # Load weights trained on MS COCO, but skip layers that
+    # are different due to the different number of classes
+    # See README for instructions to download the COCO weights
+    model.load_weights(COCO_MODEL_PATH, by_name=True,
+                       exclude=["mrcnn_class_logits", "mrcnn_bbox_fc", 
+                                "mrcnn_bbox", "mrcnn_mask"])
+elif init_with == "last":
+    # Load the last model you trained and continue training
+    model.load_weights(model.find_last()[1], by_name=True)
+
+
+## ================ train model ================ ##
+# Train the head branches
+# Passing layers="heads" freezes all layers except the head
+# layers. You can also pass a regular expression to select
+# which layers to train by name pattern.
+model.train(dataset_train, dataset_val, 
+            learning_rate=config.LEARNING_RATE, 
+            epochs=1, 
+            layers='heads')
+
+# Fine tune all layers
+# Passing layers="all" trains all layers. You can also 
+# pass a regular expression to select which layers to
+# train by name pattern.
+model.train(dataset_train, dataset_val, 
+            learning_rate=config.LEARNING_RATE / 10,
+            epochs=2, 
+            layers="all")
+
+# Save weights
+# Typically not needed because callbacks save after every epoch
+# Uncomment to save manually
+# model_path = os.path.join(MODEL_DIR, "mask_rcnn_shapes.h5")
+# model.keras_model.save_weights(model_path)
+
+
+## ================ Detection ================ ##
+class InferenceConfig(ShapesConfig):
+    GPU_COUNT = 1
+    IMAGES_PER_GPU = 1
+
+inference_config = InferenceConfig()
+
+# Recreate the model in inference mode
+model = modellib.MaskRCNN(mode="inference", 
+                          config=inference_config,
+                          model_dir=MODEL_DIR)
+
+# Get path to saved weights
+# Either set a specific path or find last trained weights
+# model_path = os.path.join(ROOT_DIR, ".h5 file name here")
+model_path = model.find_last()[1]
+
+# Load trained weights (fill in path to trained weights here)
+assert model_path != "", "Provide path to trained weights"
+print("Loading weights from ", model_path)
+model.load_weights(model_path, by_name=True)
+
+# Test on a random image
+image_id = random.choice(dataset_val.image_ids)
+original_image, image_meta, gt_class_id, gt_bbox, gt_mask =\
+    modellib.load_image_gt(dataset_val, inference_config, 
+                           image_id, use_mini_mask=False)
+
+log("original_image", original_image)
+log("image_meta", image_meta)
+log("gt_class_id", gt_class_id)
+log("gt_bbox", gt_bbox)
+log("gt_mask", gt_mask)
+
+visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, 
+                            dataset_train.class_names, figsize=(8, 8))
+
+
+
+## ================ Evaluation ================ ##
+# Compute VOC-Style mAP @ IoU=0.5
+# Running on 10 images. Increase for better accuracy.
+image_ids = np.random.choice(dataset_val.image_ids, len(dataset_val.image_ids))
+APs = []
+for image_id in image_ids:
+    # Load image and ground truth data
+    image, image_meta, gt_class_id, gt_bbox, gt_mask =\
+        modellib.load_image_gt(dataset_val, inference_config,
+                               image_id, use_mini_mask=False)
+    molded_images = np.expand_dims(modellib.mold_image(image, inference_config), 0)
+    # Run object detection
+    results = model.detect([image], verbose=0)
+    r = results[0]
+    # Compute AP
+    AP, precisions, recalls, overlaps =\
+        utils.compute_ap(gt_bbox, gt_class_id, gt_mask,
+                         r["rois"], r["class_ids"], r["scores"], r['masks'])
+    APs.append(AP)
+    
+print("mAP: ", np.mean(APs))
 
 
 
