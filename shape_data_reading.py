@@ -58,7 +58,7 @@ class ShapesConfig(Config):
     # Train on 1 GPU and 8 images per GPU. We can put multiple images on each
     # GPU because the images are small. Batch size is 8 (GPUs * images/GPU).
     GPU_COUNT = 1
-    IMAGES_PER_GPU = 8
+    IMAGES_PER_GPU = 4
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # background + 3 shapes
@@ -130,7 +130,8 @@ class ShapesDataset(utils.Dataset):
         """Load the specified image and return a [H,W,3] Numpy array.
         """
         # Load image
-        image = imread(self.image_info[image_id]['path'])
+        image = imread(self.image_info[image_id]['path'])[:,:,0:3]
+        image = resize(image, (256, 256), mode='constant', preserve_range = True)
         # If grayscale. Convert to RGB for consistency.
         if image.ndim != 3:
             image = skimage.color.gray2rgb(image)
@@ -150,14 +151,19 @@ class ShapesDataset(utils.Dataset):
         import_path=self.image_info[image_id]['path'].split('/')[1]
         # info = self.image_info[image_id]
         PATH = self.image_info[image_id]['path'].split('/')[0] +"/" + self.image_info[image_id]['path'].split('/')[1] + "/"
+        # print("load_mask_PATH:",PATH)
         train_ids = next(os.walk(PATH))[1]
         id_ = train_ids[image_id]
-        path = TRAIN_PATH + id_
+        path = PATH + id_
         count = len(next(os.walk(path + '/masks/'))[2])
         mask = np.zeros([256, 256, count], dtype=np.uint8)
         # mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
         i = 0
         for mask_file in next(os.walk(path + '/masks/'))[2]:
+            if mask_file[0] == ".":
+                mask_file=mask_file[2:]
+        #    if "." in mask_file[0]:
+        #        print("full path of nuc:", path + '/masks/' + mask_file)
             mask_ = imread(path + '/masks/' + mask_file)
             mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
                                         preserve_range=True), axis=-1)
@@ -304,5 +310,4 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
-
 
