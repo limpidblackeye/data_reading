@@ -101,11 +101,11 @@ class ShapesDataset(utils.Dataset):
     """Generates the shapes synthetic dataset. The dataset consists of simple
     shapes (triangles, squares, circles) placed randomly on a blank surface.
     The images are generated on the fly. No file access required.
-	Extend the Dataset class and add a method to load the shapes dataset, 
-	load_shapes(), and override the following methods:
-	load_image()
-	load_mask()
-	image_reference()
+    Extend the Dataset class and add a method to load the shapes dataset, 
+    load_shapes(), and override the following methods:
+    load_image()
+    load_mask()
+    image_reference()
     """
 
     def load_shapes(self,PATH):
@@ -310,4 +310,53 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
+
+
+# ## ================ Prediction ================ ##
+# Predict dataset
+dataset_predict = ShapesDataset()
+dataset_predict.load_shapes(TEST_PATH)
+dataset_predict.prepare()
+
+pred_result = []
+for i in range(len(dataset_predict.image_ids)):
+    image, image_meta, gt_class_id, gt_bbox, gt_mask =\
+        modellib.load_image_gt(dataset_val, inference_config, i, use_mini_mask=False)
+    results = model.detect([image], verbose=0)
+    r = results[0]
+    pred_result.append(r['masks'])
+
+# ## ================ run-length encoding ================ ##
+# Run-length encoding stolen from https://www.kaggle.com/rakhlin/fast-run-length-encoding-python
+def rle_encoding(x):
+    dots = np.where(x.T.flatten() == 1)[0]
+    run_lengths = []
+    prev = -2
+    for b in dots:
+        if (b>prev+1): run_lengths.extend((b + 1, 0))
+        run_lengths[-1] += 1
+        prev = b
+    return run_lengths
+
+def prob_to_rles(x, cutoff=0.5):
+    lab_img = label(x > cutoff)
+    for i in range(1, lab_img.max() + 1):
+        yield rle_encoding(lab_img == i)
+
+# iterate over the test IDs and generate run-length encodings for each seperate mask identified by skimage
+new_test_ids = []
+rles = []
+for n in range(len(dataset_predict.image_ids)):
+    id_ = next(os.walk(TEST_PATH))[1][n]
+    rle = list(prob_to_rles(pred_result[n]))
+    rles.extend(rle)
+    new_test_ids.extend([id_] * len(rle))
+
+# Create submission DataFrame
+sub = pd.DataFrame()
+sub['ImageId'] = new_test_ids
+sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
+sub.to_csv('sub-dsbowl2018-1.csv', index=False)
+
+
 
