@@ -342,7 +342,7 @@ with open ("pred_result1.list","w") as f:
     for i in pred_result:
         for j in i:
             for k in j:
-                f.write(k+"\t")
+                f.write(str(k)+"\t")
             f.write("\n")
     f.write("\n")
 
