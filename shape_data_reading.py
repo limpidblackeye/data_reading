@@ -76,7 +76,7 @@ class ShapesConfig(Config):
     TRAIN_ROIS_PER_IMAGE = 32
 
     # Use a small epoch since the data is simple
-    STEPS_PER_EPOCH = 100
+    STEPS_PER_EPOCH = 10
 
     # use small validation steps since the epoch is small
     VALIDATION_STEPS = 5
@@ -149,36 +149,39 @@ class ShapesDataset(utils.Dataset):
         """Generate instance masks for shapes of the given image ID.
         """
         import_path=self.image_info[image_id]['path'].split('/')[1]
-        # info = self.image_info[image_id]
-        PATH = self.image_info[image_id]['path'].split('/')[0] +"/" + self.image_info[image_id]['path'].split('/')[1] + "/"
-        # print("load_mask_PATH:",PATH)
-        train_ids = next(os.walk(PATH))[1]
-        id_ = train_ids[image_id]
-        path = PATH + id_
-        count = len(next(os.walk(path + '/masks/'))[2])
-        mask = np.zeros([256, 256, count], dtype=np.uint8)
-        # mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
-        i = 0
-        for mask_file in next(os.walk(path + '/masks/'))[2]:
-            if mask_file[0] == ".":
-                mask_file=mask_file[2:]
-        #    if "." in mask_file[0]:
-        #        print("full path of nuc:", path + '/masks/' + mask_file)
-            mask_ = imread(path + '/masks/' + mask_file)
-            mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
-                                        preserve_range=True), axis=-1)
-            mask[:, :, i:i+1] = mask_
-            # mask = np.maximum(mask, mask_)
-            i += 1
+        if import_path !="stage1_test":
+            # info = self.image_info[image_id]
+            PATH = self.image_info[image_id]['path'].split('/')[0] +"/" + self.image_info[image_id]['path'].split('/')[1] + "/"
+            # print("load_mask_PATH:",PATH)
+            train_ids = next(os.walk(PATH))[1]
+            id_ = train_ids[image_id]
+            path = PATH + id_
+            count = len(next(os.walk(path + '/masks/'))[2])
+            mask = np.zeros([256, 256, count], dtype=np.uint8)
+            # mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
+            i = 0
+            for mask_file in next(os.walk(path + '/masks/'))[2]:
+                if mask_file[0] == ".":
+                    mask_file=mask_file[2:]
+            #    if "." in mask_file[0]:
+            #        print("full path of nuc:", path + '/masks/' + mask_file)
+                mask_ = imread(path + '/masks/' + mask_file)
+                mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
+                                            preserve_range=True), axis=-1)
+                mask[:, :, i:i+1] = mask_
+                # mask = np.maximum(mask, mask_)
+                i += 1
 
-        # Handle occlusions
-        occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
-        for i in range(count-2, -1, -1):
-            mask[:, :, i] = mask[:, :, i] * occlusion
-            occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
-        # Map class names to class IDs.
-        class_ids = np.array([1 for s in range(count)])
-        return mask, class_ids.astype(np.int32)
+            # Handle occlusions
+            occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
+            for i in range(count-2, -1, -1):
+                mask[:, :, i] = mask[:, :, i] * occlusion
+                occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
+            # Map class names to class IDs.
+            class_ids = np.array([1 for s in range(count)])
+            return mask, class_ids.astype(np.int32)
+        else:
+            pass
 
 
 ## =================
@@ -198,7 +201,6 @@ for image_id in image_ids:
     image = dataset_train.load_image(image_id)
     mask, class_ids = dataset_train.load_mask(image_id)
     visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
-
 
 
 ## ================ Create model ================ ##
@@ -287,7 +289,7 @@ log("gt_mask", gt_mask)
 visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, 
                             dataset_train.class_names, figsize=(8, 8))
 
-
+'''
 ## ================ Evaluation ================ ##
 # Compute VOC-Style mAP @ IoU=0.5
 # Running on 10 images. Increase for better accuracy.
@@ -309,7 +311,7 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
-
+'''
 
 # ## ================ Prediction ================ ##
 # Predict dataset
@@ -320,8 +322,9 @@ print(dataset_predict.image_ids)
 
 pred_result = []
 for i in range(len(dataset_predict.image_ids)):
+    print(i)
     image, image_meta, gt_class_id, gt_bbox, gt_mask =\
-        modellib.load_image_gt(dataset_val, inference_config, i, use_mini_mask=False)
+        modellib.load_image_gt(dataset_predict, inference_config, i, use_mini_mask=False)
     results = model.detect([image], verbose=0)
     r = results[0]
     pred_result.append(r['masks'])
