@@ -9,9 +9,11 @@ import numpy as np
 # import cv2
 import matplotlib
 import matplotlib.pyplot as plt
+import pandas as pd
 from skimage.draw import circle, polygon
 from skimage.io import imread, imshow, imread_collection, concatenate_images
 from skimage.transform import resize
+from skimage.morphology import label
 
 from config import Config
 import utils
@@ -76,10 +78,10 @@ class ShapesConfig(Config):
     TRAIN_ROIS_PER_IMAGE = 32
 
     # Use a small epoch since the data is simple
-    STEPS_PER_EPOCH = 10
+    STEPS_PER_EPOCH = 200
 
     # use small validation steps since the epoch is small
-    VALIDATION_STEPS = 5
+    VALIDATION_STEPS = 10
     
 config = ShapesConfig()
 config.display()
@@ -319,15 +321,30 @@ dataset_predict = ShapesDataset()
 dataset_predict.load_shapes(TEST_PATH)
 dataset_predict.prepare()
 print(dataset_predict.image_ids)
+import gc
 
 pred_result = []
 for i in range(len(dataset_predict.image_ids)):
-    print(i)
-    image, image_meta, gt_class_id, gt_bbox, gt_mask =\
-        modellib.load_image_gt(dataset_predict, inference_config, i, use_mini_mask=False)
+    # print(i)
+    # image, image_meta, gt_class_id, gt_bbox, gt_mask =\
+    #     modellib.load_image_gt(dataset_predict, inference_config, i, use_mini_mask=False)
+    image = dataset_predict.load_image(i)
     results = model.detect([image], verbose=0)
     r = results[0]
     pred_result.append(r['masks'])
+    gc.collect()
+
+# import h5py
+# with h5py.File('pred_result1.h5', 'w') as f:
+#     f.create_dataset("pred_result1", data=pred_result)
+
+with open ("pred_result1.list","w") as f:
+    for i in pred_result:
+        for j in i:
+            for k in j:
+                f.write(k+"\t")
+            f.write("\n")
+    f.write("\n")
 
 # ## ================ run-length encoding ================ ##
 # Run-length encoding stolen from https://www.kaggle.com/rakhlin/fast-run-length-encoding-python
@@ -343,6 +360,7 @@ def rle_encoding(x):
 
 def prob_to_rles(x, cutoff=0.5):
     lab_img = label(x > cutoff)
+    print(lab_img.max())
     for i in range(1, lab_img.max() + 1):
         yield rle_encoding(lab_img == i)
 
@@ -350,6 +368,7 @@ def prob_to_rles(x, cutoff=0.5):
 new_test_ids = []
 rles = []
 for n in range(len(dataset_predict.image_ids)):
+    print(n)
     id_ = next(os.walk(TEST_PATH))[1][n]
     rle = list(prob_to_rles(pred_result[n]))
     rles.extend(rle)
