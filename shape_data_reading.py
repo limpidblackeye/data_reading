@@ -288,7 +288,6 @@ visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id,
                             dataset_train.class_names, figsize=(8, 8))
 
 
-
 ## ================ Evaluation ================ ##
 # Compute VOC-Style mAP @ IoU=0.5
 # Running on 10 images. Increase for better accuracy.
@@ -317,6 +316,7 @@ print("mAP: ", np.mean(APs))
 dataset_predict = ShapesDataset()
 dataset_predict.load_shapes(TEST_PATH)
 dataset_predict.prepare()
+print(dataset_predict.image_ids)
 
 pred_result = []
 for i in range(len(dataset_predict.image_ids)):
