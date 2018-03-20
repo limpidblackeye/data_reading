@@ -323,27 +323,38 @@ dataset_predict.prepare()
 print(dataset_predict.image_ids)
 import gc
 
+# get the size of test_image
+shape_test_image = []
+for id_ in next(os.walk(TEST_PATH))[1]:
+    img = imread(TEST_PATH + id_ + '/images/' + id_ + '.png')
+    shape_test_image.append(img.shape)
+
 pred_result = []
 for i in range(len(dataset_predict.image_ids)):
     # print(i)
     # image, image_meta, gt_class_id, gt_bbox, gt_mask =\
     #     modellib.load_image_gt(dataset_predict, inference_config, i, use_mini_mask=False)
     image = dataset_predict.load_image(i)
+    shape_0 = shape_test_image[i][0]
+    shape_1 = shape_test_image[i][1]
     results = model.detect([image], verbose=0)
     r = results[0]
+    mask_re = resize(r['masks'], (shape_0, shape_1,), mode='constant', preserve_range = True)
     pred_result.append(r['masks'])
+    # print(r['masks'].shape())
+    # resize(r['masks'], (256, 256), mode='constant', preserve_range = True)
     gc.collect()
 
 # import h5py
 # with h5py.File('pred_result1.h5', 'w') as f:
 #     f.create_dataset("pred_result1", data=pred_result)
 
-with open ("pred_result1.list","w") as f:
+with open ("pred_result2.list","w") as f:
     for i in pred_result:
         for j in i:
-            for k in j:
-                f.write(str(k)+"\t")
-            f.write("\n")
+            # for k in j:
+            f.write(str(j)+"\t")
+            # f.write("\n")
     f.write("\n")
 
 # ## ================ run-length encoding ================ ##
