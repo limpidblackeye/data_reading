@@ -291,7 +291,7 @@ log("gt_mask", gt_mask)
 visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id, 
                             dataset_train.class_names, figsize=(8, 8))
 
-'''
+
 ## ================ Evaluation ================ ##
 # Compute VOC-Style mAP @ IoU=0.5
 # Running on 10 images. Increase for better accuracy.
@@ -313,7 +313,7 @@ for image_id in image_ids:
     APs.append(AP)
     
 print("mAP: ", np.mean(APs))
-'''
+
 
 # ## ================ Prediction ================ ##
 # Predict dataset
@@ -340,8 +340,8 @@ for i in range(len(dataset_predict.image_ids)):
     results = model.detect([image], verbose=0)
     r = results[0]
     mask_re = resize(r['masks'], (shape_0, shape_1,), mode='constant', preserve_range = True)
-    pred_result.append(r['masks'])
-    # print(r['masks'].shape())
+    pred_result.append(mask_re)
+    print(mask_re.shape,next(os.walk(TEST_PATH))[1][i])
     # resize(r['masks'], (256, 256), mode='constant', preserve_range = True)
     gc.collect()
 
@@ -349,7 +349,7 @@ for i in range(len(dataset_predict.image_ids)):
 # with h5py.File('pred_result1.h5', 'w') as f:
 #     f.create_dataset("pred_result1", data=pred_result)
 
-with open ("pred_result2.list","w") as f:
+with open ("pred_result3.list","w") as f:
     for i in pred_result:
         for j in i:
             # for k in j:
@@ -371,7 +371,7 @@ def rle_encoding(x):
 
 def prob_to_rles(x, cutoff=0.5):
     lab_img = label(x > cutoff)
-    print(lab_img.max())
+    # print(lab_img.max())
     for i in range(1, lab_img.max() + 1):
         yield rle_encoding(lab_img == i)
 
@@ -379,8 +379,8 @@ def prob_to_rles(x, cutoff=0.5):
 new_test_ids = []
 rles = []
 for n in range(len(dataset_predict.image_ids)):
-    print(n)
     id_ = next(os.walk(TEST_PATH))[1][n]
+    print(n,id_)
     rle = list(prob_to_rles(pred_result[n]))
     rles.extend(rle)
     new_test_ids.extend([id_] * len(rle))
@@ -390,6 +390,5 @@ sub = pd.DataFrame()
 sub['ImageId'] = new_test_ids
 sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
 sub.to_csv('sub-dsbowl2018-1.csv', index=False)
-
 
 
