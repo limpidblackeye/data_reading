@@ -41,7 +41,6 @@ TRAIN_PATH = 'data/stage1_train/'
 TEST_PATH = 'data/stage1_test/'
 TRAIN_PATH2 = 'data/stage1_train2/'
 
-
 # Get train and test IDs
 # train_ids = next(os.walk(TRAIN_PATH))[1]
 test_ids = next(os.walk(TEST_PATH))[1]
@@ -175,7 +174,9 @@ class ShapesDataset(utils.Dataset):
                 i += 1
 
             # Handle occlusions
+            # each pixel in each 1st 2ed dim
             occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
+            # 1 is blank in occlusion, 0 is image
             for i in range(count-2, -1, -1):
                 mask[:, :, i] = mask[:, :, i] * occlusion
                 occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
@@ -323,6 +324,17 @@ dataset_predict.prepare()
 print(dataset_predict.image_ids)
 import gc
 
+def Handle_occlusions(mask):
+    # Handle occlusions
+    # each pixel in each 1st 2ed dim
+    count = mask.shape[2]
+    occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
+    # 1 is blank in occlusion, 0 is image
+    for i in range(count-2, -1, -1):
+        mask[:, :, i] = mask[:, :, i] * occlusion
+        occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
+    return mask
+
 # get the size of test_image
 shape_test_image = []
 for id_ in next(os.walk(TEST_PATH))[1]:
@@ -339,15 +351,15 @@ for i in range(len(dataset_predict.image_ids)):
     shape_1 = shape_test_image[i][1]
     results = model.detect([image], verbose=0)
     r = results[0]
+    print("r['masks']:",r['masks'].shape)
     mask_re = resize(r['masks'], (shape_0, shape_1,), mode='constant', preserve_range = True)
+    ## delete the repeat pixel
+    mask_re = Handle_occlusions(mask_re)
     pred_result.append(mask_re)
     print(mask_re.shape,next(os.walk(TEST_PATH))[1][i])
+    print("total len:",shape_0*shape_1)
     # resize(r['masks'], (256, 256), mode='constant', preserve_range = True)
     gc.collect()
-
-# import h5py
-# with h5py.File('pred_result1.h5', 'w') as f:
-#     f.create_dataset("pred_result1", data=pred_result)
 
 with open ("pred_result3.list","w") as f:
     for i in pred_result:
@@ -356,6 +368,7 @@ with open ("pred_result3.list","w") as f:
             f.write(str(j)+"\t")
             # f.write("\n")
     f.write("\n")
+
 
 # ## ================ run-length encoding ================ ##
 # Run-length encoding stolen from https://www.kaggle.com/rakhlin/fast-run-length-encoding-python
@@ -371,7 +384,7 @@ def rle_encoding(x):
 
 def prob_to_rles(x, cutoff=0.5):
     lab_img = label(x > cutoff)
-    # print(lab_img.max())
+    print(lab_img.max())
     for i in range(1, lab_img.max() + 1):
         yield rle_encoding(lab_img == i)
 
@@ -381,7 +394,9 @@ rles = []
 for n in range(len(dataset_predict.image_ids)):
     id_ = next(os.walk(TEST_PATH))[1][n]
     print(n,id_)
-    rle = list(prob_to_rles(pred_result[n]))
+    rle=[]
+    for i_rle in range(pred_result[n].shape[2]):
+        rle.append(list(prob_to_rles(pred_result[n][:,:,i_rle])))
     rles.extend(rle)
     new_test_ids.extend([id_] * len(rle))
 
@@ -390,5 +405,4 @@ sub = pd.DataFrame()
 sub['ImageId'] = new_test_ids
 sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
 sub.to_csv('sub-dsbowl2018-1.csv', index=False)
-
 
