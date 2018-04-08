@@ -9,9 +9,11 @@ import numpy as np
 # import cv2
 import matplotlib
 import matplotlib.pyplot as plt
+import pandas as pd
 from skimage.draw import circle, polygon
 from skimage.io import imread, imshow, imread_collection, concatenate_images
 from skimage.transform import resize
+from skimage.morphology import label
 
 from config import Config
 import utils
@@ -38,7 +40,6 @@ if not os.path.exists(COCO_MODEL_PATH):
 TRAIN_PATH = 'data/stage1_train/'
 TEST_PATH = 'data/stage1_test/'
 TRAIN_PATH2 = 'data/stage1_train2/'
-
 
 # Get train and test IDs
 # train_ids = next(os.walk(TRAIN_PATH))[1]
@@ -76,10 +77,10 @@ class ShapesConfig(Config):
     TRAIN_ROIS_PER_IMAGE = 32
 
     # Use a small epoch since the data is simple
-    STEPS_PER_EPOCH = 100
+    STEPS_PER_EPOCH = 500
 
     # use small validation steps since the epoch is small
-    VALIDATION_STEPS = 5
+    VALIDATION_STEPS = 50
     
 config = ShapesConfig()
 config.display()
@@ -101,11 +102,11 @@ class ShapesDataset(utils.Dataset):
     """Generates the shapes synthetic dataset. The dataset consists of simple
     shapes (triangles, squares, circles) placed randomly on a blank surface.
     The images are generated on the fly. No file access required.
-	Extend the Dataset class and add a method to load the shapes dataset, 
-	load_shapes(), and override the following methods:
-	load_image()
-	load_mask()
-	image_reference()
+    Extend the Dataset class and add a method to load the shapes dataset, 
+    load_shapes(), and override the following methods:
+    load_image()
+    load_mask()
+    image_reference()
     """
 
     def load_shapes(self,PATH):
@@ -149,36 +150,41 @@ class ShapesDataset(utils.Dataset):
         """Generate instance masks for shapes of the given image ID.
         """
         import_path=self.image_info[image_id]['path'].split('/')[1]
-        # info = self.image_info[image_id]
-        PATH = self.image_info[image_id]['path'].split('/')[0] +"/" + self.image_info[image_id]['path'].split('/')[1] + "/"
-        # print("load_mask_PATH:",PATH)
-        train_ids = next(os.walk(PATH))[1]
-        id_ = train_ids[image_id]
-        path = PATH + id_
-        count = len(next(os.walk(path + '/masks/'))[2])
-        mask = np.zeros([256, 256, count], dtype=np.uint8)
-        # mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
-        i = 0
-        for mask_file in next(os.walk(path + '/masks/'))[2]:
-            if mask_file[0] == ".":
-                mask_file=mask_file[2:]
-        #    if "." in mask_file[0]:
-        #        print("full path of nuc:", path + '/masks/' + mask_file)
-            mask_ = imread(path + '/masks/' + mask_file)
-            mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
-                                        preserve_range=True), axis=-1)
-            mask[:, :, i:i+1] = mask_
-            # mask = np.maximum(mask, mask_)
-            i += 1
+        if import_path !="stage1_test":
+            # info = self.image_info[image_id]
+            PATH = self.image_info[image_id]['path'].split('/')[0] +"/" + self.image_info[image_id]['path'].split('/')[1] + "/"
+            # print("load_mask_PATH:",PATH)
+            train_ids = next(os.walk(PATH))[1]
+            id_ = train_ids[image_id]
+            path = PATH + id_
+            count = len(next(os.walk(path + '/masks/'))[2])
+            mask = np.zeros([256, 256, count], dtype=np.uint8)
+            # mask = np.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=np.bool)
+            i = 0
+            for mask_file in next(os.walk(path + '/masks/'))[2]:
+                if mask_file[0] == ".":
+                    mask_file=mask_file[2:]
+            #    if "." in mask_file[0]:
+            #        print("full path of nuc:", path + '/masks/' + mask_file)
+                mask_ = imread(path + '/masks/' + mask_file)
+                mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
+                                            preserve_range=True), axis=-1)
+                mask[:, :, i:i+1] = mask_
+                # mask = np.maximum(mask, mask_)
+                i += 1
 
-        # Handle occlusions
-        occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
-        for i in range(count-2, -1, -1):
-            mask[:, :, i] = mask[:, :, i] * occlusion
-            occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
-        # Map class names to class IDs.
-        class_ids = np.array([1 for s in range(count)])
-        return mask, class_ids.astype(np.int32)
+            # Handle occlusions
+            # each pixel in each 1st 2ed dim
+            occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
+            # 1 is blank in occlusion, 0 is image
+            for i in range(count-2, -1, -1):
+                mask[:, :, i] = mask[:, :, i] * occlusion
+                occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
+            # Map class names to class IDs.
+            class_ids = np.array([1 for s in range(count)])
+            return mask, class_ids.astype(np.int32)
+        else:
+            pass
 
 
 ## =================
@@ -200,7 +206,6 @@ for image_id in image_ids:
     visualize.display_top_masks(image, mask, class_ids, dataset_train.class_names)
 
 
-
 ## ================ Create model ================ ##
 
 # Create model in training mode
@@ -208,7 +213,7 @@ model = modellib.MaskRCNN(mode="training", config=config,
                           model_dir=MODEL_DIR)
 
 # Which weights to start with?
-init_with = "coco"  # imagenet, coco, or last
+init_with = "last"  # imagenet, coco, or last
 
 if init_with == "imagenet":
     model.load_weights(model.get_imagenet_weights(), by_name=True)
@@ -231,8 +236,14 @@ elif init_with == "last":
 # which layers to train by name pattern.
 model.train(dataset_train, dataset_val, 
             learning_rate=config.LEARNING_RATE, 
-            epochs=1, 
+            epochs=40, 
             layers='heads')
+
+# Train the layers from ResNet stage 4 and up
+model.train(dataset_train, dataset_val, 
+            learning_rate=config.LEARNING_RATE, 
+            epochs=80, 
+            layers='4+')
 
 # Fine tune all layers
 # Passing layers="all" trains all layers. You can also 
@@ -240,7 +251,7 @@ model.train(dataset_train, dataset_val,
 # train by name pattern.
 model.train(dataset_train, dataset_val, 
             learning_rate=config.LEARNING_RATE / 10,
-            epochs=2, 
+            epochs=120, 
             layers="all")
 
 # Save weights
@@ -288,7 +299,6 @@ visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id,
                             dataset_train.class_names, figsize=(8, 8))
 
 
-
 ## ================ Evaluation ================ ##
 # Compute VOC-Style mAP @ IoU=0.5
 # Running on 10 images. Increase for better accuracy.
@@ -311,3 +321,94 @@ for image_id in image_ids:
     
 print("mAP: ", np.mean(APs))
 
+
+# ## ================ Prediction ================ ##
+# Predict dataset
+dataset_predict = ShapesDataset()
+dataset_predict.load_shapes(TEST_PATH)
+dataset_predict.prepare()
+print(dataset_predict.image_ids)
+import gc
+
+def Handle_occlusions(mask):
+    # Handle occlusions
+    # each pixel in each 1st 2ed dim
+    count = mask.shape[2]
+    occlusion = np.logical_not(mask[:, :, -1]).astype(np.uint8)
+    # 1 is blank in occlusion, 0 is image
+    for i in range(count-2, -1, -1):
+        mask[:, :, i] = mask[:, :, i] * occlusion
+        occlusion = np.logical_and(occlusion, np.logical_not(mask[:, :, i]))
+    return mask
+
+# get the size of test_image
+shape_test_image = []
+for id_ in next(os.walk(TEST_PATH))[1]:
+    img = imread(TEST_PATH + id_ + '/images/' + id_ + '.png')
+    shape_test_image.append(img.shape)
+
+pred_result = []
+for i in range(len(dataset_predict.image_ids)):
+    # print(i)
+    # image, image_meta, gt_class_id, gt_bbox, gt_mask =\
+    #     modellib.load_image_gt(dataset_predict, inference_config, i, use_mini_mask=False)
+    image = dataset_predict.load_image(i)
+    shape_0 = shape_test_image[i][0]
+    shape_1 = shape_test_image[i][1]
+    results = model.detect([image], verbose=0)
+    r = results[0]
+    #print("r['masks']:",r['masks'].shape)
+    mask_re = resize(r['masks'], (shape_0, shape_1,), mode='constant', preserve_range = True)
+    ## delete the repeat pixel
+    mask_re = Handle_occlusions(mask_re)
+    pred_result.append(mask_re)
+    #print(mask_re.shape,next(os.walk(TEST_PATH))[1][i])
+    #print("total len:",shape_0*shape_1)
+    # resize(r['masks'], (256, 256), mode='constant', preserve_range = True)
+    gc.collect()
+
+with open ("pred_result_last40_60_80.list","w") as f:
+    for i in pred_result:
+        for j in i:
+            # for k in j:
+            f.write(str(j)+"\t")
+            # f.write("\n")
+    f.write("\n")
+
+
+# ## ================ run-length encoding ================ ##
+# Run-length encoding stolen from https://www.kaggle.com/rakhlin/fast-run-length-encoding-python
+def rle_encoding(x):
+    dots = np.where(x.T.flatten() == 1)[0]
+    run_lengths = []
+    prev = -2
+    for b in dots:
+        if (b>prev+1): run_lengths.extend((b + 1, 0))
+        run_lengths[-1] += 1
+        prev = b
+    return run_lengths
+
+def prob_to_rles(x, cutoff=0.5):
+    lab_img = label(x > cutoff)
+    print(lab_img.max())
+    for i in range(1, lab_img.max() + 1):
+        yield rle_encoding(lab_img == i)
+
+# iterate over the test IDs and generate run-length encodings for each seperate mask identified by skimage
+new_test_ids = []
+rles = []
+for n in range(len(dataset_predict.image_ids)):
+    id_ = next(os.walk(TEST_PATH))[1][n]
+    #print(n,id_)
+    rle=[]
+    for i_rle in range(pred_result[n].shape[2]):
+        rle.extend(list(prob_to_rles(pred_result[n][:,:,i_rle])))
+        rle.sort(key=lambda x:x[0])
+    rles.extend(rle)
+    new_test_ids.extend([id_] * len(rle))
+
+# Create submission DataFrame
+sub = pd.DataFrame()
+sub['ImageId'] = new_test_ids
+sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
+sub.to_csv('sub-dsbowl2018-1.csv', index=False)
