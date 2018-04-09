@@ -8,10 +8,12 @@ import os
 
 # echo 'export PATH="/usr/local/opt/python@2/bin:$PATH"' >> ~/.bash_profile
 
-dir = "/Users/april/Desktop/2018Spring/cell_nucleus/data/stage1_train/"
-dir_gray = "/Users/april/Desktop/2018Spring/cell_nucleus/data/train_gray/"
-dir_color = "/Users/april/Desktop/2018Spring/cell_nucleus/data/train_color/"
 dir_data = "/Users/april/Desktop/2018Spring/cell_nucleus/data/"
+dir = dir_data+"/stage1_train/"
+dir_test = dir_data+"/stage1_test/"
+dir=dir_test
+dir_gray = dir_data+"/train_gray/"
+dir_color = dir_data+"/train_color/"
 
 def judge_gray(image):
 ### 1 is gray, 0 is not gray ###
