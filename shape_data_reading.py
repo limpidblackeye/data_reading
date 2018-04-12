@@ -37,9 +37,20 @@ if not os.path.exists(COCO_MODEL_PATH):
     utils.download_trained_weights(COCO_MODEL_PATH)
 
 # Data Path
+#TRAIN_PATH = 'data/stage1_train/'
+#TEST_PATH = 'data/stage1_test/'
+#TRAIN_PATH2 = 'data/stage1_train2/'
+#TRAIN_PATH2 = TRAIN_PATH
+#TRAIN_PATH = 'data/stage1_train_color/'
+#TEST_PATH = 'data/test_stage1_train_color/'
+#TRAIN_PATH = 'data/stage1_train_color/'
+#TEST_PATH = 'data/test_stage1_train_color/'
+
 TRAIN_PATH = 'data/stage1_train/'
-TEST_PATH = 'data/stage1_test/'
-TRAIN_PATH2 = 'data/stage1_train2/'
+TEST_PATH = 'data/stage2_test_final/'
+
+TRAIN_PATH2 = TRAIN_PATH
+
 
 # Get train and test IDs
 # train_ids = next(os.walk(TRAIN_PATH))[1]
@@ -59,7 +70,7 @@ class ShapesConfig(Config):
     # Train on 1 GPU and 8 images per GPU. We can put multiple images on each
     # GPU because the images are small. Batch size is 8 (GPUs * images/GPU).
     GPU_COUNT = 1
-    IMAGES_PER_GPU = 4
+    IMAGES_PER_GPU = 1
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # background + 3 shapes
@@ -196,6 +207,8 @@ class ShapesDataset(utils.Dataset):
             #    if "." in mask_file[0]:
             #        print("full path of nuc:", path + '/masks/' + mask_file)
                 mask_ = imread(path + '/masks/' + mask_file)
+#                if len(mask_.shape==3):
+#                    mask_=mask_[:,:,0]
                 mask_ = np.expand_dims(resize(mask_, (256, 256), mode='constant', 
                                             preserve_range=True), axis=-1)
                 mask[:, :, i:i+1] = mask_
@@ -265,13 +278,13 @@ elif init_with == "last":
 # which layers to train by name pattern.
 model.train(dataset_train, dataset_val, 
             learning_rate=config.LEARNING_RATE, 
-            epochs=40, 
+            epochs=20, 
             layers='heads')
 
-# Train the layers from ResNet stage 4 and up
+# # Train the layers from ResNet stage 4 and up
 model.train(dataset_train, dataset_val, 
             learning_rate=config.LEARNING_RATE, 
-            epochs=80, 
+            epochs=40, 
             layers='4+')
 
 # Fine tune all layers
@@ -279,8 +292,8 @@ model.train(dataset_train, dataset_val,
 # pass a regular expression to select which layers to
 # train by name pattern.
 model.train(dataset_train, dataset_val, 
-            learning_rate=config.LEARNING_RATE / 10,
-            epochs=120, 
+            learning_rate=config.LEARNING_RATE,
+            epochs=60, 
             layers="all")
 
 # Save weights
@@ -331,7 +344,7 @@ visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id,
 ## ================ Evaluation ================ ##
 # Compute VOC-Style mAP @ IoU=0.5
 # Running on 10 images. Increase for better accuracy.
-image_ids = np.random.choice(dataset_val.image_ids, len(dataset_val.image_ids))
+image_ids = np.random.choice(dataset_val.image_ids, 4)
 APs = []
 for image_id in image_ids:
     # Load image and ground truth data
@@ -387,16 +400,17 @@ for i in range(len(dataset_predict.image_ids)):
     results = model.detect([image], verbose=0)
     r = results[0]
     #print("r['masks']:",r['masks'].shape)
-    mask_re = resize(r['masks'], (shape_0, shape_1,), mode='constant', preserve_range = True)
-    ## delete the repeat pixel
-    mask_re = Handle_occlusions(mask_re)
-    pred_result.append(mask_re)
+    if len(r['masks']) >0:
+    	mask_re = resize(r['masks'], (shape_0, shape_1,), mode='constant', preserve_range = True)
+    	## delete the repeat pixel
+    	mask_re = Handle_occlusions(mask_re)
+    	pred_result.append(mask_re)
     #print(mask_re.shape,next(os.walk(TEST_PATH))[1][i])
     #print("total len:",shape_0*shape_1)
     # resize(r['masks'], (256, 256), mode='constant', preserve_range = True)
     gc.collect()
 
-with open ("pred_result_last40_60_80.list","w") as f:
+with open ("pred_result_stage2.list","w") as f:
     for i in pred_result:
         for j in i:
             # for k in j:
@@ -440,4 +454,4 @@ for n in range(len(dataset_predict.image_ids)):
 sub = pd.DataFrame()
 sub['ImageId'] = new_test_ids
 sub['EncodedPixels'] = pd.Series(rles).apply(lambda x: ' '.join(str(y) for y in x))
-sub.to_csv('sub-dsbowl2018-1.csv', index=False)
+sub.to_csv('sub-dsbowl2018-stage2.csv', index=False)
